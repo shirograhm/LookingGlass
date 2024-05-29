@@ -23,7 +23,13 @@ namespace LookingGlass.StatsDisplay
             //floatPrecision.NumberDecimalDigits = StatsDisplayClass.floatPrecision.Value;
             floatPrecision = "0." + new string('#', StatsDisplayClass.floatPrecision.Value);
             StatsDisplayClass.statDictionary.Clear();
-            StatsDisplayClass.statDictionary.Add("luck", cachedUserBody => { return $"{utilityString}{(cachedUserBody.inventory.GetItemCount(RoR2Content.Items.Clover) - cachedUserBody.inventory.GetItemCount(RoR2Content.Items.LunarBadLuck))}{styleString}"; });
+            StatsDisplayClass.statDictionary.Add("luck", cachedUserBody => {
+                if (cachedUserBody.master)
+                {
+                    return $"{utilityString}{(cachedUserBody.master.luck).ToString(floatPrecision)}{styleString}";
+                }
+                return $"{utilityString}{(cachedUserBody.inventory.GetItemCount(RoR2Content.Items.Clover) - cachedUserBody.inventory.GetItemCount(RoR2Content.Items.LunarBadLuck))}{styleString}";
+            });
             StatsDisplayClass.statDictionary.Add("baseDamage", cachedUserBody => { return $"{damageString}{(cachedUserBody.damage).ToString(floatPrecision)}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("crit", cachedUserBody => { return $"{damageString}{(cachedUserBody.crit).ToString(floatPrecision)}%{styleString}"; });
             StatsDisplayClass.statDictionary.Add("attackSpeed", cachedUserBody => { return $"{damageString}{(cachedUserBody.attackSpeed).ToString(floatPrecision)}{styleString}"; });
@@ -56,7 +62,13 @@ namespace LookingGlass.StatsDisplay
             StatsDisplayClass.statDictionary.Add("visionDistance", cachedUserBody => { return $"{utilityString}{(cachedUserBody.visionDistance).ToString(floatPrecision)}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("critHeal", cachedUserBody => { return $"{healingString}{(cachedUserBody.critHeal).ToString(floatPrecision)}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("cursePenalty", cachedUserBody => { return $"{utilityString}{(cachedUserBody.cursePenalty).ToString(floatPrecision)}{styleString}"; });
-            StatsDisplayClass.statDictionary.Add("hasOneShotProtection", cachedUserBody => { return $"{utilityString}{(cachedUserBody.hasOneShotProtection)}{styleString}"; });
+            StatsDisplayClass.statDictionary.Add("hasOneShotProtection", cachedUserBody => {
+                if (!cachedUserBody.healthComponent)
+                {
+                    return $"{utilityString}N/A{styleString}";
+                }
+                return $"{utilityString}{(cachedUserBody.oneShotProtectionFraction * cachedUserBody.healthComponent.fullCombinedHealth - cachedUserBody.healthComponent.missingCombinedHealth) >= 0}{styleString}";
+            });
             StatsDisplayClass.statDictionary.Add("isGlass", cachedUserBody => { return $"{utilityString}{(cachedUserBody.isGlass)}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("canPerformBackstab", cachedUserBody => { return $"{damageString}{(cachedUserBody.canPerformBackstab)}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("canReceiveBackstab", cachedUserBody => { return $"{damageString}{(cachedUserBody.canReceiveBackstab)}{styleString}"; });
@@ -88,6 +100,11 @@ namespace LookingGlass.StatsDisplay
             StatsDisplayClass.statDictionary.Add("currentCombatDamage", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.currentCombatDamage}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("remainingComboDuration", cachedUserBody => { return $"{utilityString}{(int)BasePlugin.instance.dpsMeter.timer + 1}{styleString}"; });
             StatsDisplayClass.statDictionary.Add("maxCombo", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.maxCombo}{styleString}"; });
+            StatsDisplayClass.statDictionary.Add("maxComboThisRun", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.maxRunCombo}{styleString}"; });
+
+            StatsDisplayClass.statDictionary.Add("currentCombatKills", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.currentCombatDamage}{styleString}"; });
+            StatsDisplayClass.statDictionary.Add("maxKillCombo", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.maxCombo}{styleString}"; });
+            StatsDisplayClass.statDictionary.Add("maxKillComboThisRun", cachedUserBody => { return $"{damageString}{BasePlugin.instance.dpsMeter.maxRunCombo}{styleString}"; });
 
             StatsDisplayClass.statDictionary.Add("critWithLuck", cachedUserBody =>
             {

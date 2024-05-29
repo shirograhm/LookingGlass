@@ -20,6 +20,7 @@ namespace LookingGlass.ItemStatsNameSpace
         public static ConfigEntry<bool> itemStats;
         public static ConfigEntry<bool> fullDescOnPickup;
         public static ConfigEntry<bool> itemStatsOnPing;
+        public static ConfigEntry<float> itemStatsFontSize;
 
         private static Hook overrideHook;
         private static Hook overrideHook2;
@@ -35,6 +36,7 @@ namespace LookingGlass.ItemStatsNameSpace
             itemStats = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats", true, "Shows full item descriptions plus calculations on mouseover");
             fullDescOnPickup = BasePlugin.instance.Config.Bind<bool>("Misc", "Full Item Description On Pickup", true, "Shows full item descriptions on pickup");
             itemStatsOnPing = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats On Ping", true, "Shows item descriptions when you ping an item in the world");
+            itemStatsFontSize = BasePlugin.instance.Config.Bind<float>("Misc", "Item Stats Font Size", 100f, "Changes the font size of item stats");
             SetupRiskOfOptions();
         }
         public void SetupRiskOfOptions()
@@ -42,6 +44,7 @@ namespace LookingGlass.ItemStatsNameSpace
             ModSettingsManager.AddOption(new CheckBoxOption(itemStats, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new CheckBoxOption(fullDescOnPickup, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new CheckBoxOption(itemStatsOnPing, new CheckBoxConfig() { restartRequired = false }));
+            ModSettingsManager.AddOption(new SliderOption(itemStatsFontSize, new SliderConfig() { restartRequired = false, min = 1, max = 300 }));
         }
         void InitHooks()
         {
@@ -81,6 +84,8 @@ namespace LookingGlass.ItemStatsNameSpace
         internal static void SetDescription(ItemIcon self, ItemIndex newItemIndex, int newItemCount)
         {
             var itemDef = ItemCatalog.GetItemDef(newItemIndex);
+            if (itemDef.nameToken == "ITEM_MYSTICSITEMS_MANUSCRIPT_NAME")
+                return;
             if (self.tooltipProvider != null && itemDef != null)
             {
                 CharacterMaster master = null;
@@ -95,106 +100,112 @@ namespace LookingGlass.ItemStatsNameSpace
         }
         public static string GetDescription(ItemDef itemDef, ItemIndex newItemIndex, int newItemCount, CharacterMaster master, bool withOneMore)
         {
-            var itemDescription = $"{Language.GetString(itemDef.descriptionToken)}\n";
-
-            if (ItemDefinitions.allItemDefinitions.ContainsKey((int)newItemIndex))
+            var itemDescription = $"<size={itemStatsFontSize.Value}%>{Language.GetString(itemDef.descriptionToken)}\n";
+            try
             {
-                ItemStatsDef itemStats = ItemDefinitions.allItemDefinitions[(int)newItemIndex];
-                if (withOneMore && itemStats.descriptions.Count != 0)
+                if (ItemDefinitions.allItemDefinitions.ContainsKey((int)newItemIndex))
                 {
-                    itemDescription += $"\nWith one more stack than you have:";
-                    newItemCount++;
-                }
-                if (master == null)
-                {
-                    master = LocalUserManager.GetFirstLocalUser().cachedMaster;
-                }
-                List<float> values = itemStats.calculateValues(master, newItemCount);
-                if (values is not null)
-                {
-                    for (int i = 0; i < itemStats.descriptions.Count; i++)
+                    ItemStatsDef itemStats = ItemDefinitions.allItemDefinitions[(int)newItemIndex];
+                    if (withOneMore && itemStats.descriptions.Count != 0)
                     {
-                        itemDescription += $"\n<color=\"white\">{itemStats.descriptions[i]}</color>";
-                        switch (itemStats.valueTypes[i])
+                        itemDescription += $"\nWith one more stack than you have:";
+                        newItemCount++;
+                    }
+                    if (master == null)
+                    {
+                        master = LocalUserManager.GetFirstLocalUser().cachedMaster;
+                    }
+                    List<float> values = itemStats.calculateValues(master, newItemCount);
+                    if (values is not null)
+                    {
+                        for (int i = 0; i < itemStats.descriptions.Count; i++)
                         {
-                            case ItemStatsDef.ValueType.Healing:
-                                itemDescription += "<style=\"cIsHealing";
-                                break;
-                            case ItemStatsDef.ValueType.Damage:
-                                itemDescription += "<style=\"cIsDamage";
-                                break;
-                            case ItemStatsDef.ValueType.Utility:
-                                itemDescription += "<style=\"cIsUtility";
-                                break;
-                            case ItemStatsDef.ValueType.Health:
-                                itemDescription += "<style=\"cIsHealth";
-                                break;
-                            case ItemStatsDef.ValueType.Void:
-                                itemDescription += "<style=\"cIsVoid";
-                                break;
-                            case ItemStatsDef.ValueType.HumanObjective:
-                                itemDescription += "<style=\"cHumanObjective";
-                                break;
-                            case ItemStatsDef.ValueType.LunarObjective:
-                                itemDescription += "<style=\"cLunarObjective";
-                                break;
-                            case ItemStatsDef.ValueType.Stack:
-                                itemDescription += "<style=\"cStack";
-                                break;
-                            case ItemStatsDef.ValueType.WorldEvent:
-                                itemDescription += "<style=\"cWorldEvent";
-                                break;
-                            case ItemStatsDef.ValueType.Artifact:
-                                itemDescription += "<style=\"cArtifact";
-                                break;
-                            case ItemStatsDef.ValueType.UserSetting:
-                                itemDescription += "<style=\"cUserSetting";
-                                break;
-                            case ItemStatsDef.ValueType.Death:
-                                itemDescription += "<style=\"cDeath";
-                                break;
-                            case ItemStatsDef.ValueType.Sub:
-                                itemDescription += "<style=\"cSub";
-                                break;
-                            case ItemStatsDef.ValueType.Mono:
-                                itemDescription += "<style=\"cMono";
-                                break;
-                            case ItemStatsDef.ValueType.Shrine:
-                                itemDescription += "<style=\"cShrine";
-                                break;
-                            case ItemStatsDef.ValueType.Event:
-                                itemDescription += "<style=\"cEvent";
-                                break;
-                                //case ItemStatsDef.ValueType.Other:
-                                //    itemDescription += "<color=\"white";
-                                //    break;
-                        }
-                        switch (itemStats.measurementUnits[i])
-                        {
-                            case ItemStatsDef.MeasurementUnits.Meters:
-                                itemDescription += $"\">{values[i]:0.###}m</style>";
-                                break;
-                            case ItemStatsDef.MeasurementUnits.Percentage:
-                                itemDescription += $"\">{values[i] * 100:0.###}%</style>";
-                                break;
-                            case ItemStatsDef.MeasurementUnits.Health:
-                                itemDescription += $"\">{values[i]:0.###} HP</style>";
-                                break;
-                            case ItemStatsDef.MeasurementUnits.Healing:
-                                itemDescription += $"\">{values[i]:0.###} HP/s</style>";
-                                break;
-                            case ItemStatsDef.MeasurementUnits.Number:
-                                itemDescription += $"\">{values[i]:0.###}</style>";
-                                break;
-                            case ItemStatsDef.MeasurementUnits.Seconds:
-                                itemDescription += $"\">{values[i]:0.###} seconds</style>";
-                                break;
-                            default:
-                                break;
+                            itemDescription += $"\n<color=\"white\">{itemStats.descriptions[i]}</color>";
+                            switch (itemStats.valueTypes[i])
+                            {
+                                case ItemStatsDef.ValueType.Healing:
+                                    itemDescription += "<style=\"cIsHealing";
+                                    break;
+                                case ItemStatsDef.ValueType.Damage:
+                                    itemDescription += "<style=\"cIsDamage";
+                                    break;
+                                case ItemStatsDef.ValueType.Utility:
+                                    itemDescription += "<style=\"cIsUtility";
+                                    break;
+                                case ItemStatsDef.ValueType.Health:
+                                    itemDescription += "<style=\"cIsHealth";
+                                    break;
+                                case ItemStatsDef.ValueType.Void:
+                                    itemDescription += "<style=\"cIsVoid";
+                                    break;
+                                case ItemStatsDef.ValueType.HumanObjective:
+                                    itemDescription += "<style=\"cHumanObjective";
+                                    break;
+                                case ItemStatsDef.ValueType.LunarObjective:
+                                    itemDescription += "<style=\"cLunarObjective";
+                                    break;
+                                case ItemStatsDef.ValueType.Stack:
+                                    itemDescription += "<style=\"cStack";
+                                    break;
+                                case ItemStatsDef.ValueType.WorldEvent:
+                                    itemDescription += "<style=\"cWorldEvent";
+                                    break;
+                                case ItemStatsDef.ValueType.Artifact:
+                                    itemDescription += "<style=\"cArtifact";
+                                    break;
+                                case ItemStatsDef.ValueType.UserSetting:
+                                    itemDescription += "<style=\"cUserSetting";
+                                    break;
+                                case ItemStatsDef.ValueType.Death:
+                                    itemDescription += "<style=\"cDeath";
+                                    break;
+                                case ItemStatsDef.ValueType.Sub:
+                                    itemDescription += "<style=\"cSub";
+                                    break;
+                                case ItemStatsDef.ValueType.Mono:
+                                    itemDescription += "<style=\"cMono";
+                                    break;
+                                case ItemStatsDef.ValueType.Shrine:
+                                    itemDescription += "<style=\"cShrine";
+                                    break;
+                                case ItemStatsDef.ValueType.Event:
+                                    itemDescription += "<style=\"cEvent";
+                                    break;
+                                    //case ItemStatsDef.ValueType.Other:
+                                    //    itemDescription += "<color=\"white";
+                                    //    break;
+                            }
+                            switch (itemStats.measurementUnits[i])
+                            {
+                                case ItemStatsDef.MeasurementUnits.Meters:
+                                    itemDescription += $"\">{values[i]:0.###}m</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.Percentage:
+                                    itemDescription += $"\">{values[i] * 100:0.###}%</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.Health:
+                                    itemDescription += $"\">{values[i]:0.###} HP</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.Healing:
+                                    itemDescription += $"\">{values[i]:0.###} HP/s</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.Number:
+                                    itemDescription += $"\">{values[i]:0.###}</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.Seconds:
+                                    itemDescription += $"\">{values[i]:0.###} seconds</style>";
+                                    break;
+                                default:
+                                    break;
+                            }
                         }
                     }
                 }
             }
+            catch (Exception)
+            {
+            }
+            itemDescription += "</size>";
             return itemDescription;
         }
 
