@@ -1,3 +1,24 @@
+### 1.7.4
+Fixed the wording slightly in the "one more" text. Added basic proc info to abilities.
+
+### 1.7.3
+Fixed math issue with items that have exponentially scaling cooldown reduction.
+
+### 1.7.2
+Quick fix for some calculations going in reverse if you exceed 100% chance
+
+### 1.7.1
+Big thanks to shirograhm for this update. Refactor of the backend for itemstats definitions/stats definitions to be much more readable. Adjusted definitions of some item stats to be more accurate.
+
+### 1.7.0
+Fixed equipment not always showing their full descriptions. Added option to adjust how long pickup display notifications last. Added difficultyCoefficient to StatsDisplay as an option. Made the item calculations for item stats optional.
+
+### 1.6.3
+Fixed healthPercentage not using the float precision option
+
+### 1.6.2
+Big thanks to shirograhm for most of these changes. Luck is gathered in a more accurate way now, should work better with modded items that add luck. Added a check for buff definitions to just use their name if no definition (name/description) was provided. Fixed equipment not utilizing ally's stats when looking in the scoreboard.
+
 ### 1.6.1
 Forgot to push option for Buff Timer size
 

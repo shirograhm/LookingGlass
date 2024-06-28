@@ -12,12 +12,14 @@ using System.Text;
 using static RoR2.Chat;
 using System.Linq;
 using LookingGlass.StatsDisplay;
+using RoR2.Skills;
 
 namespace LookingGlass.ItemStatsNameSpace
 {
     internal class ItemStats : BaseThing
     {
         public static ConfigEntry<bool> itemStats;
+        public static ConfigEntry<bool> itemStatsCalculations;
         public static ConfigEntry<bool> fullDescOnPickup;
         public static ConfigEntry<bool> itemStatsOnPing;
         public static ConfigEntry<float> itemStatsFontSize;
@@ -25,6 +27,7 @@ namespace LookingGlass.ItemStatsNameSpace
         private static Hook overrideHook;
         private static Hook overrideHook2;
         private static Hook overrideHook3;
+        private static Hook overrideHook4;
         public ItemStats()
         {
             Setup();
@@ -33,7 +36,8 @@ namespace LookingGlass.ItemStatsNameSpace
         {
             InitHooks();
             ItemDefinitions.RegisterAll();
-            itemStats = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats", true, "Shows full item descriptions plus calculations on mouseover");
+            itemStats = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats", true, "Shows full item descriptions on mouseover");
+            itemStatsCalculations = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats Calculations", true, "Gives calculations for vanilla items and modded items which have added specific support. (Sadly, items are not designed in a way to allow this to be automatic)");
             fullDescOnPickup = BasePlugin.instance.Config.Bind<bool>("Misc", "Full Item Description On Pickup", true, "Shows full item descriptions on pickup");
             itemStatsOnPing = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats On Ping", true, "Shows item descriptions when you ping an item in the world");
             itemStatsFontSize = BasePlugin.instance.Config.Bind<float>("Misc", "Item Stats Font Size", 100f, "Changes the font size of item stats");
@@ -42,14 +46,22 @@ namespace LookingGlass.ItemStatsNameSpace
         public void SetupRiskOfOptions()
         {
             ModSettingsManager.AddOption(new CheckBoxOption(itemStats, new CheckBoxConfig() { restartRequired = false }));
+            ModSettingsManager.AddOption(new CheckBoxOption(itemStatsCalculations, new CheckBoxConfig() { restartRequired = false, checkIfDisabled = ItemStatsDisabled }));
             ModSettingsManager.AddOption(new CheckBoxOption(fullDescOnPickup, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new CheckBoxOption(itemStatsOnPing, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new SliderOption(itemStatsFontSize, new SliderConfig() { restartRequired = false, min = 1, max = 300 }));
+        }
+        private static bool ItemStatsDisabled()
+        {
+            return !itemStats.Value;
         }
         void InitHooks()
         {
             var targetMethod = typeof(GenericNotification).GetMethod(nameof(GenericNotification.SetItem), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             var destMethod = typeof(ItemStats).GetMethod(nameof(PickupText), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            overrideHook = new Hook(targetMethod, destMethod, this);
+            targetMethod = typeof(GenericNotification).GetMethod(nameof(GenericNotification.SetEquipment), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            destMethod = typeof(ItemStats).GetMethod(nameof(EquipmentText), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             overrideHook = new Hook(targetMethod, destMethod, this);
 
             targetMethod = typeof(RoR2.UI.ItemIcon).GetMethod(nameof(RoR2.UI.ItemIcon.SetItemIndex), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
@@ -59,19 +71,48 @@ namespace LookingGlass.ItemStatsNameSpace
             targetMethod = typeof(PingerController).GetMethod(nameof(PingerController.SetCurrentPing), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             destMethod = typeof(ItemStats).GetMethod(nameof(ItemPinged), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             overrideHook3 = new Hook(targetMethod, destMethod, this);
+
+            targetMethod = typeof(RoR2.UI.SkillIcon).GetMethod(nameof(RoR2.UI.SkillIcon.Update), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            destMethod = typeof(ItemStats).GetMethod(nameof(SkillUpdate), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            overrideHook4 = new Hook(targetMethod, destMethod, this);
         }
+
         internal void EquipText(EquipmentIcon self)
         {
-            if (self.tooltipProvider && self.currentDisplayData.equipmentDef && StatsDisplayClass.cachedUserBody && StatsDisplayClass.cachedUserBody.inventory)
+            CharacterBody body = StatsDisplayClass.cachedUserBody;
+            // Multiplayer compatibility
+            if (self.targetInventory)
             {
-                self.tooltipProvider.overrideBodyText = $"{Language.GetString(self.currentDisplayData.equipmentDef.descriptionToken)}\nCooldown Reduction: <style=\"cIsUtility>{((1 - StatsDisplayClass.cachedUserBody.inventory.CalculateEquipmentCooldownScale()) * 100).ToString(StatsDisplayDefinitions.floatPrecision)}%</style>\nCooldown: <style=\"cIsUtility>{((self.currentDisplayData.equipmentDef.cooldown * StatsDisplayClass.cachedUserBody.inventory.CalculateEquipmentCooldownScale())).ToString(StatsDisplayDefinitions.floatPrecision)}s</style>";
+                CharacterMaster master = self.targetInventory.GetComponentInParent<CharacterMaster>();
+                if (master && master.GetBody())
+                {
+                    // Use master body if exists
+                    body = master.GetBody();
+                }
             }
+#pragma warning disable Publicizer001 // Accessing a member that was not originally public
+            if (self.tooltipProvider && self.currentDisplayData.equipmentDef && body && body.inventory)
+            {
+                String cooldownReductionFormatted = ((1 - body.inventory.CalculateEquipmentCooldownScale()) * 100).ToString(StatsDisplayDefinitions.floatPrecision);
+                String currentCooldownFormatted = (self.currentDisplayData.equipmentDef.cooldown * body.inventory.CalculateEquipmentCooldownScale()).ToString(StatsDisplayDefinitions.floatPrecision);
+                
+                self.tooltipProvider.overrideBodyText = $"{Language.GetString(self.currentDisplayData.equipmentDef.descriptionToken)}" +
+                    $"\nCooldown Reduction: <style=\"cIsUtility>{cooldownReductionFormatted}%</style>" +
+                    $"\nCooldown: <style=\"cIsUtility>{currentCooldownFormatted} seconds</style>";
+            }
+#pragma warning restore Publicizer001 // Accessing a member that was not originally public
         }
         void PickupText(Action<GenericNotification, ItemDef> orig, GenericNotification self, ItemDef itemDef)
         {
             orig(self, itemDef);
             if (fullDescOnPickup.Value)
                 self.descriptionText.token = itemDef.descriptionToken;
+        }
+        void EquipmentText(Action<GenericNotification, EquipmentDef> orig, GenericNotification self, EquipmentDef equipmentDef)
+        {
+            orig(self, equipmentDef);
+            if (fullDescOnPickup.Value)
+                self.descriptionText.token = equipmentDef.descriptionToken;
         }
         void ItemIndexText(Action<ItemIcon, ItemIndex, int> orig, ItemIcon self, ItemIndex newItemIndex, int newItemCount)
         {
@@ -80,6 +121,16 @@ namespace LookingGlass.ItemStatsNameSpace
             {
                 SetDescription(self, newItemIndex, newItemCount);
             }
+        }
+        void SkillUpdate(Action<SkillIcon> orig, SkillIcon self)
+        {
+            orig(self);
+            // TODO Change skills description to include proc cof data
+            string desc = Language.GetString(self.targetSkill.skillDescriptionToken);
+
+            if (ProcCoefficientData.hasProcCoefficient(self.targetSkill.skillNameToken)) desc = desc + "\nProc Coefficient: <color=#a6b3bd>" + ProcCoefficientData.GetProcCoefficient(self.targetSkill.skillNameToken) + "</color>\n";
+
+            self.tooltipProvider.overrideBodyText = desc;
         }
         internal static void SetDescription(ItemIcon self, ItemIndex newItemIndex, int newItemCount)
         {
@@ -103,12 +154,12 @@ namespace LookingGlass.ItemStatsNameSpace
             var itemDescription = $"<size={itemStatsFontSize.Value}%>{Language.GetString(itemDef.descriptionToken)}\n";
             try
             {
-                if (ItemDefinitions.allItemDefinitions.ContainsKey((int)newItemIndex))
+                if (itemStatsCalculations.Value && ItemDefinitions.allItemDefinitions.ContainsKey((int)newItemIndex))
                 {
                     ItemStatsDef itemStats = ItemDefinitions.allItemDefinitions[(int)newItemIndex];
                     if (withOneMore && itemStats.descriptions.Count != 0)
                     {
-                        itemDescription += $"\nWith one more stack than you have:";
+                        itemDescription += $"\nWith one more stack, you will have:";
                         newItemCount++;
                     }
                     if (master == null)
@@ -138,6 +189,7 @@ namespace LookingGlass.ItemStatsNameSpace
                                 case ItemStatsDef.ValueType.Void:
                                     itemDescription += "<style=\"cIsVoid";
                                     break;
+                                case ItemStatsDef.ValueType.Gold:
                                 case ItemStatsDef.ValueType.HumanObjective:
                                     itemDescription += "<style=\"cHumanObjective";
                                     break;
@@ -168,6 +220,7 @@ namespace LookingGlass.ItemStatsNameSpace
                                 case ItemStatsDef.ValueType.Shrine:
                                     itemDescription += "<style=\"cShrine";
                                     break;
+                                case ItemStatsDef.ValueType.Armor:
                                 case ItemStatsDef.ValueType.Event:
                                     itemDescription += "<style=\"cEvent";
                                     break;
@@ -183,11 +236,17 @@ namespace LookingGlass.ItemStatsNameSpace
                                 case ItemStatsDef.MeasurementUnits.Percentage:
                                     itemDescription += $"\">{values[i] * 100:0.###}%</style>";
                                     break;
-                                case ItemStatsDef.MeasurementUnits.Health:
+                                case ItemStatsDef.MeasurementUnits.FlatHealth:
                                     itemDescription += $"\">{values[i]:0.###} HP</style>";
                                     break;
-                                case ItemStatsDef.MeasurementUnits.Healing:
+                                case ItemStatsDef.MeasurementUnits.PercentHealth:
+                                    itemDescription += $"\">{values[i] * 100:0.###}% HP</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.FlatHealing:
                                     itemDescription += $"\">{values[i]:0.###} HP/s</style>";
+                                    break;
+                                case ItemStatsDef.MeasurementUnits.PercentHealing:
+                                    itemDescription += $"\">{values[i] * 100:0.###}% HP/s</style>";
                                     break;
                                 case ItemStatsDef.MeasurementUnits.Number:
                                     itemDescription += $"\">{values[i]:0.###}</style>";
