@@ -13,6 +13,9 @@ using static RoR2.Chat;
 using System.Linq;
 using LookingGlass.StatsDisplay;
 using RoR2.Skills;
+using System.Security.Cryptography;
+using LookingGlass.ItemStatsNameSpace;
+using UnityEngine;
 
 namespace LookingGlass.ItemStatsNameSpace
 {
@@ -23,6 +26,8 @@ namespace LookingGlass.ItemStatsNameSpace
         public static ConfigEntry<bool> fullDescOnPickup;
         public static ConfigEntry<bool> itemStatsOnPing;
         public static ConfigEntry<float> itemStatsFontSize;
+        public static ConfigEntry<bool> capChancePercentage;
+        public static ConfigEntry<bool> abilityProcCoefficients;
 
         private static Hook overrideHook;
         private static Hook overrideHook2;
@@ -41,6 +46,8 @@ namespace LookingGlass.ItemStatsNameSpace
             fullDescOnPickup = BasePlugin.instance.Config.Bind<bool>("Misc", "Full Item Description On Pickup", true, "Shows full item descriptions on pickup");
             itemStatsOnPing = BasePlugin.instance.Config.Bind<bool>("Misc", "Item Stats On Ping", true, "Shows item descriptions when you ping an item in the world");
             itemStatsFontSize = BasePlugin.instance.Config.Bind<float>("Misc", "Item Stats Font Size", 100f, "Changes the font size of item stats");
+            capChancePercentage = BasePlugin.instance.Config.Bind<bool>("Misc", "Cap Chance Percentage", true, "Caps displayed chances at 100%. May interact weirdly with luck if turned off");
+            abilityProcCoefficients = BasePlugin.instance.Config.Bind<bool>("Misc", "Ability Proc Coefficients", true, "Shows ability proc coefficients on supported survivors");
             SetupRiskOfOptions();
         }
         public void SetupRiskOfOptions()
@@ -50,6 +57,8 @@ namespace LookingGlass.ItemStatsNameSpace
             ModSettingsManager.AddOption(new CheckBoxOption(fullDescOnPickup, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new CheckBoxOption(itemStatsOnPing, new CheckBoxConfig() { restartRequired = false }));
             ModSettingsManager.AddOption(new SliderOption(itemStatsFontSize, new SliderConfig() { restartRequired = false, min = 1, max = 300 }));
+            ModSettingsManager.AddOption(new CheckBoxOption(capChancePercentage, new CheckBoxConfig() { restartRequired = false }));
+            ModSettingsManager.AddOption(new CheckBoxOption(abilityProcCoefficients, new CheckBoxConfig() { restartRequired = false }));
         }
         private static bool ItemStatsDisabled()
         {
@@ -106,7 +115,14 @@ namespace LookingGlass.ItemStatsNameSpace
         {
             orig(self, itemDef);
             if (fullDescOnPickup.Value)
-                self.descriptionText.token = itemDef.descriptionToken;
+                if (Language.GetString(itemDef.descriptionToken) == itemDef.descriptionToken)
+                {
+                    self.descriptionText.token = itemDef.pickupToken;
+                }
+                else
+                {
+                    self.descriptionText.token = itemDef.descriptionToken;
+                }
         }
         void EquipmentText(Action<GenericNotification, EquipmentDef> orig, GenericNotification self, EquipmentDef equipmentDef)
         {
@@ -125,12 +141,170 @@ namespace LookingGlass.ItemStatsNameSpace
         void SkillUpdate(Action<SkillIcon> orig, SkillIcon self)
         {
             orig(self);
-            // TODO Change skills description to include proc cof data
-            string desc = Language.GetString(self.targetSkill.skillDescriptionToken);
+            StringBuilder desc = new StringBuilder(Language.GetString(self.targetSkill.skillDescriptionToken));
 
-            if (ProcCoefficientData.hasProcCoefficient(self.targetSkill.skillNameToken)) desc = desc + "\nProc Coefficient: <color=#a6b3bd>" + ProcCoefficientData.GetProcCoefficient(self.targetSkill.skillNameToken) + "</color>\n";
+            if (abilityProcCoefficients.Value)
+            {
+                if (ProcCoefficientData.hasProcCoefficient(self.targetSkill.skillNameToken))
+                {
+                    desc.Append("\nProc Coefficient: <color=#a6b3bd>" + ProcCoefficientData.GetProcCoefficient(self.targetSkill.skillNameToken) + "</color>");
+                    desc.Append("\nSkill Cooldown: <style=\"cIsDamage\">" + CalculateSkillCooldown(self) + "</style> <style=\"cStack\">(Base: " + self.targetSkill.skillDef.baseRechargeInterval + ")</style>");
+                }
 
-            self.tooltipProvider.overrideBodyText = desc;
+
+                if (self.targetSkill.skillNameToken == "VOIDSURVIVOR_PRIMARY_NAME" || self.targetSkill.skillNameToken == "VOIDSURVIVOR_SECONDARY_NAME")
+                    desc.Append("\nProc Coefficient: <style=cIsVoid>").Append((ProcCoefficientData.GetProcCoefficient("CORRUPTED_" + self.targetSkill.skillNameToken)).ToString("0.00")).Append("</style>");
+
+
+
+                CharacterBody body = self.targetSkill.characterBody;
+
+                int itemCount = 0;
+                ItemStatsDef itemStats;
+                foreach (var item in ItemCatalog.allItemDefs)
+                {
+                    if (ItemDefinitions.allItemDefinitions.ContainsKey((int)item.itemIndex))
+                    {
+                        itemCount = body.inventory.GetItemCount(item.itemIndex);
+                        if (itemCount > 0)
+                        {
+                            itemStats = ItemDefinitions.allItemDefinitions[(int)item.itemIndex];
+                            if (itemStats.hasChance)
+                            {
+                                desc.Append("\n").Append(Language.GetString(item.nameToken)).Append(": <style=cIsDamage>");
+
+                                desc.Append((itemStats.calculateValuesNew(body.master.luck, itemCount, ProcCoefficientData.GetProcCoefficient(self.targetSkill.skillNameToken))[0] * 100).ToString("0.000")).Append("%</style>");
+
+                                if (itemStats.chanceScaling == ItemStatsDef.ChanceScaling.Linear)
+                                {
+                                    desc.Append(" <style=cStack>(");
+                                    desc.Append((int)Math.Ceiling(1 / itemStats.calculateValuesNew(0f, 1, ProcCoefficientData.GetProcCoefficient(self.targetSkill.skillNameToken))[0]));
+                                    desc.Append(" to cap)</style>");
+                                }
+
+                                if (self.targetSkill.skillNameToken == "VOIDSURVIVOR_PRIMARY_NAME" || self.targetSkill.skillNameToken == "VOIDSURVIVOR_SECONDARY_NAME")
+                                {
+                                    // TODO align this text to the one above
+                                    desc.Append("\n").Append("<style=cIsVoid>").Append((itemStats.calculateValuesNew(body.master.luck, itemCount, ProcCoefficientData.GetProcCoefficient("CORRUPTED_" + self.targetSkill.skillNameToken))[0] * 100).ToString("0.000")).Append("%</style>");
+
+                                    if (itemStats.chanceScaling == ItemStatsDef.ChanceScaling.Linear)
+                                    {
+                                        desc.Append(" <style=cStack>(");
+                                        desc.Append((int)Math.Ceiling(1 / itemStats.calculateValuesNew(0f, 1, ProcCoefficientData.GetProcCoefficient("CORRUPTED_" + self.targetSkill.skillNameToken))[0]));
+                                        desc.Append(" to cap)</style>");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                }
+            }
+            
+
+
+
+            self.tooltipProvider.overrideBodyText = desc.ToString();
+        }
+        float CalculateSkillCooldown(SkillIcon self)
+        {
+
+            if (self.targetSkill.skillDef.baseRechargeInterval < 0.5f)
+                return self.targetSkill.skillDef.baseRechargeInterval;
+            CharacterBody body = self.targetSkill.characterBody;
+            CacheObtainedItems(body);
+
+            int itemCount = 0;
+            ItemStatsDef itemStats;
+            float scale = 1f;
+            int badLuckCount = 0;
+            float calculated_skill_cooldown;
+            foreach (var item in cachedItems)
+            {
+                if (ItemCooldownReduction.hasSkillCooldown((int)item.itemIndex))
+                {
+                    itemCount = body.inventory.GetItemCount(item.itemIndex);
+
+                    if (itemCount > 0)
+                    {
+                        int reductionValueIndex = ItemCooldownReduction.GetReductionValueIndex((int)item.itemIndex);
+                        // Both items that have non scalable skill reduction happen to have the same cooldown, it should be changed if new item with different non scalable skill reduction is added
+                        if (item.itemIndex == RoR2Content.Items.LunarBadLuck.itemIndex)
+                        {
+                            badLuckCount = itemCount;
+                            continue;
+                        }
+
+                        if (reductionValueIndex < 0)
+                        {
+                            scale *= 0.33f;
+                            continue;
+                        }
+                        try//gotta be honest, this works, but I'm scared of how it might work with other item mods so I'm adding a trycatch block lol
+                        {
+                            if (ItemCooldownReduction.GetItemTargetSkill((int)item.itemIndex) == (int)SkillSlot.None || ItemCooldownReduction.GetItemTargetSkill((int)item.itemIndex) == (int)self.targetSkillSlot)
+                            {
+                                if (ItemDefinitions.allItemDefinitions[(int)item.itemIndex].calculateValues == null)
+                                {
+                                    scale *= 1 - ItemDefinitions.allItemDefinitions[(int)item.itemIndex].calculateValuesNew(1, itemCount, 1)[reductionValueIndex];
+                                }
+                                else
+                                {
+                                    scale *= 1 - ItemDefinitions.allItemDefinitions[(int)item.itemIndex].calculateValues(body.master, itemCount)[reductionValueIndex];
+                                }
+
+                            }
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }
+                }
+            }
+
+            calculated_skill_cooldown = self.targetSkill.skillDef.baseRechargeInterval * scale;
+
+            if (badLuckCount > 0)
+            {
+                calculated_skill_cooldown -= ItemDefinitions.allItemDefinitions[(int)RoR2Content.Items.LunarBadLuck.itemIndex].calculateValuesNew(0, badLuckCount, 1)[0];
+            }
+
+            if (calculated_skill_cooldown < 0.5f)
+                calculated_skill_cooldown = 0.5f;
+
+            return calculated_skill_cooldown;
+
+        }
+        List<ItemDef> cachedItems = new List<ItemDef>();
+        float cachingInterval = 0;
+        void CacheObtainedItems(CharacterBody body)//just trying to avoid looping through the whole catalog every frame lol
+        {
+            cachingInterval += Time.deltaTime;
+            if (cachingInterval > 5)
+            {
+                cachingInterval = 0;
+                foreach (var item in ItemCatalog.allItemDefs)
+                {
+                    if (ItemCooldownReduction.hasSkillCooldown((int)item.itemIndex))
+                    {
+                        int itemCount = body.inventory.GetItemCount(item.itemIndex);
+                        if (itemCount > 0)
+                        {
+                            if (!cachedItems.Contains(item))
+                            {
+                                cachedItems.Add(item);
+                            }
+                        }
+                        else
+                        {
+                            if (cachedItems.Contains(item))
+                            {
+                                cachedItems.Remove(item);
+                            }
+                        }
+                    }
+                }
+            }
         }
         internal static void SetDescription(ItemIcon self, ItemIndex newItemIndex, int newItemCount)
         {
@@ -149,8 +323,13 @@ namespace LookingGlass.ItemStatsNameSpace
                 self.tooltipProvider.overrideBodyText = GetDescription(itemDef, newItemIndex, newItemCount, master, false);
             }
         }
-        public static string GetDescription(ItemDef itemDef, ItemIndex newItemIndex, int newItemCount, CharacterMaster master, bool withOneMore)
+        public static string GetDescription(
+            ItemDef itemDef, ItemIndex newItemIndex, int newItemCount, CharacterMaster master, bool withOneMore, bool forceNew = false)
         {
+            if (Language.GetString(itemDef.descriptionToken) == itemDef.descriptionToken)
+            {
+                return Language.GetString(itemDef.pickupToken);
+            }
             var itemDescription = $"<size={itemStatsFontSize.Value}%>{Language.GetString(itemDef.descriptionToken)}\n";
             try
             {
@@ -159,14 +338,34 @@ namespace LookingGlass.ItemStatsNameSpace
                     ItemStatsDef itemStats = ItemDefinitions.allItemDefinitions[(int)newItemIndex];
                     if (withOneMore && itemStats.descriptions.Count != 0)
                     {
-                        itemDescription += $"\nWith one more stack, you will have:";
+                        if (newItemCount == 0 || forceNew)
+                        {
+                            itemDescription += $"\nWith this item, you will have:";
+                        }
+                        else
+                        {
+                            itemDescription += $"\nWith another stack, you will have:";
+                        }
                         newItemCount++;
                     }
                     if (master == null)
                     {
                         master = LocalUserManager.GetFirstLocalUser().cachedMaster;
                     }
-                    List<float> values = itemStats.calculateValues(master, newItemCount);
+                    float luck = 0f;
+                    if (master != null)
+                    {
+                        luck = master.luck;
+                    }
+                    List<float> values;
+                    if (itemStats.calculateValues == null)
+                    {
+                        values = itemStats.calculateValuesNew(luck, newItemCount, 1f);
+                    }
+                    else
+                    {
+                        values = itemStats.calculateValues(master, newItemCount);
+                    }
                     if (values is not null)
                     {
                         for (int i = 0; i < itemStats.descriptions.Count; i++)

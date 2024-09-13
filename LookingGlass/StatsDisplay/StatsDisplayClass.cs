@@ -46,14 +46,14 @@ namespace LookingGlass.StatsDisplay
             Setup();
             SetupRiskOfOptions();
         }
-        const string syntaxList = " \n luck \n baseDamage \n crit \n attackSpeed \n armor \n armorDamageReduction \n regen \n speed \n availableJumps \n maxJumps \n killCount \n mountainShrines \n experience \n level \n maxHealth \n maxBarrier \n barrierDecayRate \n maxShield \n acceleration \n jumpPower \n maxJumpHeight \n damage \n critMultiplier \n bleedChance \n visionDistance \n critHeal \n cursePenalty \n hasOneShotProtection \n isGlass \n canPerformBackstab \n canReceiveBackstab \n healthPercentage \n goldPortal \n msPortal \n shopPortal \n dps \n currentCombatDamage \n remainingComboDuration \n maxCombo \n maxComboThisRun \n currentCombatKills \n maxKillCombo \n maxKillComboThisRun \n critWithLuck \n bleedChanceWithLuck \n velocity \n teddyBearBlockChance \n saferSpacesCD \n instaKillChance \n voidPortal \n difficultyCoefficient";
+        const string syntaxList = " \n luck \n baseDamage \n crit \n attackSpeed \n armor \n armorDamageReduction \n regen \n speed \n availableJumps \n maxJumps \n killCount \n mountainShrines \n experience \n level \n maxHealth \n maxBarrier \n barrierDecayRate \n maxShield \n acceleration \n jumpPower \n maxJumpHeight \n damage \n critMultiplier \n bleedChance \n visionDistance \n critHeal \n cursePenalty \n hasOneShotProtection \n isGlass \n canPerformBackstab \n canReceiveBackstab \n healthPercentage \n goldPortal \n msPortal \n shopPortal \n dps \n currentCombatDamage \n remainingComboDuration \n maxCombo \n maxComboThisRun \n currentCombatKills \n maxKillCombo \n maxKillComboThisRun \n critWithLuck \n bleedChanceWithLuck \n velocity \n teddyBearBlockChance \n saferSpacesCD \n instaKillChance \n voidPortal \n difficultyCoefficient \n stage";
         public void Setup()
         {
             statsDisplay = BasePlugin.instance.Config.Bind<bool>("Stats Display", "StatsDisplay", true, "Enables Stats Display");
             statsDisplayString = BasePlugin.instance.Config.Bind<string>("Stats Display", "Stats Display String",
                 "<size=120%>Stats</size>\n" +
                 "Luck: [luck]\n" +
-                "Damage: [baseDamage]\n" +
+                "Damage: [damage]\n" +
                 "Crit Chance: [critWithLuck]\n" +
                 "Attack Speed: [attackSpeed]\n" +
                 "Armor: [armor] | [armorDamageReduction]\n" +
@@ -79,7 +79,7 @@ namespace LookingGlass.StatsDisplay
             secondaryStatsDisplayString = BasePlugin.instance.Config.Bind<string>("Stats Display", "Secondary Stats Display String",
                 "<size=120%>Stats</size>\n" +
                 "Luck: [luck]\n" +
-                "Damage: [baseDamage]\n" +
+                "Damage: [damage]\n" +
                 "Crit Chance: [critWithLuck]\n" +
                 "Bleed Chance: [bleedChanceWithLuck]\n" +
                 "Attack Speed: [attackSpeed]\n" +
@@ -160,7 +160,7 @@ namespace LookingGlass.StatsDisplay
                 }
                 if (!statTracker)
                 {
-                    foreach (var item in RoR2.Run.instance.uiInstance.GetComponentsInChildren<VerticalLayoutGroup>())
+                    foreach (var item in RoR2.Run.instance.uiInstances[0].GetComponentsInChildren<VerticalLayoutGroup>())
                     {
                         if (item.gameObject.name == "RightInfoBar")
                         {

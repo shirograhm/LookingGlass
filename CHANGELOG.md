@@ -1,3 +1,39 @@
+### 1.9.5
+Fixed proc coefficient for MUL-T. Finished adding them for the new survivors.
+
+### 1.9.4
+Fixed issue with "Input Disables Command Prompt" not working
+
+### 1.9.3
+Fixed typo with razorwire
+
+### 1.9.2
+Added config option to disable ability proc coefficients. fixed currentCombatKills showing currentCombatDamage.
+
+### 1.9.1
+Huge thanks to timoreo22 for doing the research for the new item descriptions. Yes a lot of them don't match the in-game description, blame Gearbox for not writing good descriptions I guess.
+
+### 1.9.0
+Quick fix for Seekers of the Storm, minor visual issues but it functions.
+
+### 1.8.5
+Fixed issue with CommandQueue (probably)
+
+### 1.8.4
+Added setting to uncap crit chance. Fixed Purity cooldown calculations being broken. Void item pickers have clearer text. 
+
+### 1.8.3
+Minor fix for pickuip descriptions on items without descriptions
+
+### 1.8.2
+Fixed default config for statsdisplay using baseDamage not damage
+
+### 1.8.1
+Fixed item sorting bugs with Regenerating Scrap. Re-added a few "for fun" item stats that got removed. Added option to show corrupted item info in the command menu.
+
+### 1.8.0
+Hude thanks to Warmek and SSM240 for 99% of this update. Added a new internal calculateValuesNew alternative to calculateValues for items. Fixed descriptions of items that have no descriptions. Added cooldown/proc information for skills. Added more options for item sorting, you can now sort them in very intricate ways if you so desire. Added stage to statsdisplay.
+
 ### 1.7.4
 Fixed the wording slightly in the "one more" text. Added basic proc info to abilities.
 
